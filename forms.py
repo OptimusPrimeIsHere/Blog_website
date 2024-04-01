@@ -35,6 +35,7 @@ class CommentForm(FlaskForm):
 
 #Create a form to view contact msg's
 class ContactForm(FlaskForm):
+
     name = StringField("Name",validators=[DataRequired()])
     email = StringField('Email', validators=[DataRequired(), Email(), Length(min=6, max=40)])
     phone = StringField('Phone', validators=[DataRequired(), Length(10)])

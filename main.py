@@ -8,7 +8,7 @@ from flask_gravatar import Gravatar
 from flask_login import UserMixin, login_user, LoginManager, current_user, logout_user
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import relationship, DeclarativeBase, Mapped, mapped_column
-from sqlalchemy import Integer, String, Text
+from sqlalchemy import Integer, String, Text, ForeignKey
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 from forms import CreatePostForm, RegisterForm, LoginForm, CommentForm, ContactForm
@@ -79,8 +79,6 @@ class User(UserMixin, db.Model):
     posts = relationship("BlogPost", back_populates="author")
     # Parent relationship: "comment_author" refers to the comment_author property in the Comment class.
     comments = relationship("Comment", back_populates="comment_author")
-    # Contact --> child of User
-    contact_child = relationship("Contact",back_populates="contact_user")
 
 # Create a table for the comments on the blog posts
 class Comment(db.Model):
@@ -98,8 +96,7 @@ class Comment(db.Model):
 # Create a Table for the contact msg from user orelse you can sent email at that if it worked!
 class Contact(db.Model):
     __tablename__ = "contact"
-    user_id: Mapped[str] = mapped_column(Integer, db.ForeignKey("users.id"))
-    contact_user = relationship("User",back_populates="contact_child")
+    user_id: Mapped[int] = mapped_column(Integer,primary_key=True)
     name: Mapped[str] = mapped_column(String(100),primary_key=True)
     phone: Mapped[str] = mapped_column(String(12))
     email: Mapped[str] = mapped_column(String(100), unique=True)
@@ -289,7 +286,8 @@ def contact():
         # email=form.email.data,
         # phone=form.phone.data,
         # message=form.message.data
-        new_contact=Contact(name=form.name.data,
+        new_contact=Contact(user_id=current_user.id,
+                            name=form.name.data,
                             email=form.email.data,
                             phone=form.phone.data,
                             message=form.message.data)
