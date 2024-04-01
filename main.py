@@ -1,7 +1,7 @@
 from datetime import date,datetime
 from dotenv import load_dotenv
 import os
-from flask import Flask, abort, render_template, redirect, url_for, flash, request
+from flask import Flask, abort, render_template, redirect, url_for, flash
 from flask_bootstrap import Bootstrap5
 from flask_ckeditor import CKEditor
 from flask_gravatar import Gravatar
@@ -11,7 +11,7 @@ from sqlalchemy.orm import relationship, DeclarativeBase, Mapped, mapped_column
 from sqlalchemy import Integer, String, Text
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
-from forms import CreatePostForm, RegisterForm, LoginForm, CommentForm
+from forms import CreatePostForm, RegisterForm, LoginForm, CommentForm, ContactForm
 # Optional: add contact me email functionality (Day 60)
 # import smtplib
 
@@ -93,7 +93,8 @@ class User(UserMixin, db.Model):
     posts = relationship("BlogPost", back_populates="author")
     # Parent relationship: "comment_author" refers to the comment_author property in the Comment class.
     comments = relationship("Comment", back_populates="comment_author")
-
+    # Contact --> child of User
+    contact_child = relationship("Contact",back_populates="contact_user")
 
 # Create a table for the comments on the blog posts
 class Comment(db.Model):
@@ -105,14 +106,23 @@ class Comment(db.Model):
     author_id: Mapped[int] = mapped_column(Integer, db.ForeignKey("users.id"))
     comment_author = relationship("User", back_populates="comments")
     # Child Relationship to the BlogPosts
-    post_id: Mapped[str] = mapped_column(Integer, db.ForeignKey("blog_posts.id"))
+    post_id: Mapped[int] = mapped_column(Integer, db.ForeignKey("blog_posts.id"))
     parent_post = relationship("BlogPost", back_populates="comments")
 
+# Create a Table for the contact msg from user orelse you can sent email at that if it worked!
+class Contact(db.Model):
+    __tablename__ = "contact"
+    user_id: Mapped[str] = mapped_column(Integer, db.ForeignKey("users.id"))
+    contact_user = relationship("User",back_populates="contact_child")
+    name: Mapped[str] = mapped_column(String(100),primary_key=True)
+    phone: Mapped[str] = mapped_column(String(12))
+    email: Mapped[str] = mapped_column(String(100), unique=True)
+    message: Mapped[str] = mapped_column(Text,nullable=False)
 
 with app.app_context():
     db.create_all()
 
-
+#  Use a decorator so only an admin user can create a new post
 # Create an admin-only decorator
 def admin_only(f):
     @wraps(f)
@@ -125,7 +135,7 @@ def admin_only(f):
 
     return decorated_function
 
-
+#  Use Werkzeug to hash the user's password when creating a new user.
 # Register new users into the User database
 @app.route('/register', methods=["GET", "POST"])
 def register():
@@ -145,19 +155,18 @@ def register():
             method='pbkdf2:sha256',
             salt_length=8
         )
-        new_user = User(
-            email=form.email.data,
-            name=form.name.data,
-            password=hash_and_salted_password,
-        )
+        new_user = User(email = form.email.data,
+                        name = form.name.data,
+                        password = hash_and_salted_password)
         db.session.add(new_user)
         db.session.commit()
         # This line will authenticate the user with Flask-Login
         login_user(new_user)
         return redirect(url_for("get_all_posts"))
-    return render_template("register.html", form=form, current_user=current_user,year= datetime.now().year)
+    return render_template("register.html", form=form, current_user=current_user)
 
 
+# Retrieve a user from the database based on their email.
 @app.route('/login', methods=["GET", "POST"])
 def login():
     form = LoginForm()
@@ -178,7 +187,7 @@ def login():
             login_user(user)
             return redirect(url_for('get_all_posts'))
 
-    return render_template("login.html", form=form, current_user=current_user,year= datetime.now().year)
+    return render_template("login.html", form=form, current_user=current_user)
 
 
 @app.route('/logout')
@@ -186,7 +195,16 @@ def logout():
     logout_user()
     return redirect(url_for('get_all_posts'))
 
+#  I also got a 404 error coming from here:
+#
+# # create a user loader callback
+# @login_manager.user_loader
+# def load_user(user_id):
+#     return db.get_or_404(User, user_id)
 
+# I solved it by clearing the cache of my browser first.
+# I think it's because the browser remembered who was logged in,
+# but then off course could not find back that user because you had just deleted the .db
 @app.route('/')
 def get_all_posts():
     result = db.session.execute(db.select(BlogPost))
@@ -277,10 +295,24 @@ def about():
 
 @app.route("/contact", methods=["GET", "POST"])
 def contact():
-    return render_template("contact.html", current_user=current_user,year= datetime.now().year)
+    cond=False
+    form = ContactForm()
+    if form.validate_on_submit():
+        cond=True
+        # name=form.name.data,
+        # email=form.email.data,
+        # phone=form.phone.data,
+        # message=form.message.data
+        new_contact=Contact(name=form.name.data,
+                            email=form.email.data,
+                            phone=form.phone.data,
+                            message=form.message.data)
+        db.session.add(new_contact)
+        db.session.commit()
+    return render_template("contact.html",form=form, current_user=current_user,year= datetime.now().year,msg_sent=cond)
 
-# Optional: You can include the email sending code from Day 60:
-# DON'T put your email and password here directly! The code will be visible when you upload to Github.
+ # Optional: You can include the email sending code from Day 60:
+# DON'T put your email and password here directly! The code will be visible when you upload to GitHub.
 # Use environment variables instead (Day 35)
 
 # MAIL_ADDRESS = os.environ.get("EMAIL_KEY")
